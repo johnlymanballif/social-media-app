@@ -1,0 +1,250 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = "file:./dev.db"
+}
+
+// ============================================
+// AUTH MODELS
+// ============================================
+
+model User {
+  id             String    @id @default(cuid())
+  email          String    @unique
+  emailVerified  DateTime?
+  name           String?
+  password       String?
+  image          String?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  // Relations
+  accounts          Account[]
+  sessions          Session[]
+  workspaceMembers  WorkspaceMember[]
+  createdWorkspaces Workspace[]       @relation("WorkspaceCreator")
+  createdPosts      Post[]            @relation("PostCreator")
+  comments          Comment[]
+  sentInvites       Invite[]          @relation("InviteSender")
+}
+
+model Account {
+  id                String  @id @default(cuid())
+  userId            String
+  type              String
+  provider          String
+  providerAccountId String
+  refresh_token     String?
+  access_token      String?
+  expires_at        Int?
+  token_type        String?
+  scope             String?
+  id_token          String?
+  session_state     String?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerAccountId])
+}
+
+model Session {
+  id           String   @id @default(cuid())
+  sessionToken String   @unique
+  userId       String
+  expires      DateTime
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model VerificationToken {
+  identifier String
+  token      String   @unique
+  expires    DateTime
+
+  @@unique([identifier, token])
+}
+
+// ============================================
+// WORKSPACE & TEAM MODELS
+// ============================================
+
+model Workspace {
+  id          String   @id @default(cuid())
+  name        String
+  slug        String   @unique
+  description String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  creatorId   String
+
+  // Relations
+  creator        User              @relation("WorkspaceCreator", fields: [creatorId], references: [id])
+  members        WorkspaceMember[]
+  campaigns      Campaign[]
+  posts          Post[]
+  socialAccounts SocialAccount[]
+  invites        Invite[]
+}
+
+model WorkspaceMember {
+  id          String   @id @default(cuid())
+  workspaceId String
+  userId      String
+  role        String   @default("EDITOR")
+  joinedAt    DateTime @default(now())
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([workspaceId, userId])
+}
+
+model Invite {
+  id          String   @id @default(cuid())
+  email       String
+  token       String   @unique @default(cuid())
+  role        String   @default("EDITOR")
+  workspaceId String
+  senderId    String
+  status      String   @default("PENDING")
+  expiresAt   DateTime
+  createdAt   DateTime @default(now())
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  sender    User      @relation("InviteSender", fields: [senderId], references: [id])
+
+  @@unique([email, workspaceId])
+}
+
+// ============================================
+// CONTENT MODELS
+// ============================================
+
+model Campaign {
+  id          String    @id @default(cuid())
+  name        String
+  description String?
+  color       String    @default("#3B82F6")
+  startDate   DateTime?
+  endDate     DateTime?
+  workspaceId String
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  posts     Post[]
+}
+
+model Post {
+  id          String   @id @default(cuid())
+  content     String
+  mediaUrls   String   @default("[]")
+  status      String   @default("DRAFT")
+  workspaceId String
+  campaignId  String?
+  creatorId   String
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  workspace      Workspace       @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  campaign       Campaign?       @relation(fields: [campaignId], references: [id], onDelete: SetNull)
+  creator        User            @relation("PostCreator", fields: [creatorId], references: [id])
+  versions       PostVersion[]
+  comments       Comment[]
+  scheduledPosts ScheduledPost[]
+  publishedPosts PublishedPost[]
+}
+
+model PostVersion {
+  id        String   @id @default(cuid())
+  postId    String
+  content   String
+  mediaUrls String   @default("[]")
+  version   Int
+  createdAt DateTime @default(now())
+
+  post Post @relation(fields: [postId], references: [id], onDelete: Cascade)
+
+  @@unique([postId, version])
+}
+
+model Comment {
+  id        String   @id @default(cuid())
+  content   String
+  postId    String
+  authorId  String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  post   Post @relation(fields: [postId], references: [id], onDelete: Cascade)
+  author User @relation(fields: [authorId], references: [id])
+}
+
+// ============================================
+// SOCIAL INTEGRATION MODELS
+// ============================================
+
+model SocialAccount {
+  id           String    @id @default(cuid())
+  platform     String
+  accountId    String
+  accountName  String
+  accessToken  String?
+  refreshToken String?
+  expiresAt    DateTime?
+  workspaceId  String
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  workspace      Workspace       @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  scheduledPosts ScheduledPost[]
+  publishedPosts PublishedPost[]
+
+  @@unique([platform, accountId, workspaceId])
+}
+
+model ScheduledPost {
+  id              String    @id @default(cuid())
+  postId          String
+  socialAccountId String
+  scheduledFor    DateTime
+  publishedAt     DateTime?
+  status          String    @default("PENDING")
+  createdAt       DateTime  @default(now())
+
+  post          Post          @relation(fields: [postId], references: [id], onDelete: Cascade)
+  socialAccount SocialAccount @relation(fields: [socialAccountId], references: [id], onDelete: Cascade)
+  publishedPost PublishedPost?
+}
+
+model PublishedPost {
+  id               String   @id @default(cuid())
+  postId           String
+  socialAccountId  String
+  scheduledPostId  String?  @unique
+  platformPostId   String?
+  platformUrl      String?
+  publishedAt      DateTime @default(now())
+
+  post          Post           @relation(fields: [postId], references: [id], onDelete: Cascade)
+  socialAccount SocialAccount  @relation(fields: [socialAccountId], references: [id], onDelete: Cascade)
+  scheduledPost ScheduledPost? @relation(fields: [scheduledPostId], references: [id], onDelete: SetNull)
+  analytics     Analytics[]
+}
+
+model Analytics {
+  id              String   @id @default(cuid())
+  publishedPostId String
+  impressions     Int      @default(0)
+  engagements     Int      @default(0)
+  likes           Int      @default(0)
+  comments        Int      @default(0)
+  shares          Int      @default(0)
+  clicks          Int      @default(0)
+  reach           Int      @default(0)
+  recordedAt      DateTime @default(now())
+
+  publishedPost PublishedPost @relation(fields: [publishedPostId], references: [id], onDelete: Cascade)
+}
