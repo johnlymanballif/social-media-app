@@ -1,24 +1,28 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import Link from "next/link";
-import { DashboardLayout } from "@/components/layout/DashboardLayout";
-import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
-import { Avatar } from "@/components/ui/avatar";
-import { Input } from "@/components/ui/input";
-import { Select } from "@/components/ui/select";
-import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import {
-  FileText,
+  Box,
+  Paper,
+  Typography,
+  TextField,
+  InputAdornment,
+  IconButton,
+  Avatar,
+  Chip,
+  Divider,
+  alpha,
+} from "@mui/material";
+import {
   Search,
-  Filter,
-  MoreVertical,
-  MessageSquare,
-  Calendar,
-  Eye,
-} from "lucide-react";
-import { formatDate, truncate } from "@/lib/utils";
+  Add,
+  MoreVert,
+  ChatBubbleOutline,
+  Event,
+  VisibilityOutlined,
+} from "@mui/icons-material";
+import { DashboardLayout } from "@/components/layout/DashboardLayout";
 
 interface Post {
   id: string;
@@ -40,41 +44,33 @@ interface Post {
   _count: { comments: number; publishedPosts: number };
 }
 
-const STATUS_COLORS: Record<string, string> = {
-  DRAFT: "bg-gray-100 text-gray-800",
-  IN_REVIEW: "bg-yellow-100 text-yellow-800",
-  APPROVED: "bg-green-100 text-green-800",
-  SCHEDULED: "bg-blue-100 text-blue-800",
-  PUBLISHED: "bg-purple-100 text-purple-800",
-  FAILED: "bg-red-100 text-red-800",
+const STATUS_CONFIG: Record<string, { label: string; color: "default" | "error" | "warning" | "success" | "info"; bg: string; text: string }> = {
+  DRAFT: { label: "Draft", color: "default", bg: "#F3F4F6", text: "#374151" },
+  IN_REVIEW: { label: "In Review", color: "warning", bg: "#FEF3C7", text: "#92400E" },
+  APPROVED: { label: "Approved", color: "success", bg: "#D1FAE5", text: "#065F46" },
+  SCHEDULED: { label: "Scheduled", color: "info", bg: "#DBEAFE", text: "#1E40AF" },
+  PUBLISHED: { label: "Published", color: "success", bg: "#EDE9FE", text: "#5B21B6" },
+  FAILED: { label: "Failed", color: "error", bg: "#FEE2E2", text: "#991B1B" },
 };
 
 const MOCK_POSTS: Post[] = [
   {
     id: "1",
-    content:
-      "Exciting news coming soon! Stay tuned for our biggest announcement yet. We've been working on something special for months. #innovation #startup",
+    content: "Exciting news coming soon! Stay tuned for our biggest announcement yet. We've been working on something special for months. #innovation #startup",
     status: "SCHEDULED",
     createdAt: new Date(Date.now() - 2 * 24 * 60 * 60 * 1000).toISOString(),
     updatedAt: new Date(Date.now() - 1 * 24 * 60 * 60 * 1000).toISOString(),
     creator: { id: "1", name: "John Doe", email: "john@example.com", image: null },
     campaign: { id: "1", name: "Product Launch", color: "#3B82F6" },
     scheduledPosts: [
-      {
-        scheduledFor: new Date(Date.now() + 2 * 24 * 60 * 60 * 1000).toISOString(),
-        socialAccount: { platform: "TWITTER", accountName: "@company" },
-      },
-      {
-        scheduledFor: new Date(Date.now() + 2 * 24 * 60 * 60 * 1000).toISOString(),
-        socialAccount: { platform: "LINKEDIN", accountName: "Company Page" },
-      },
+      { scheduledFor: new Date(Date.now() + 2 * 24 * 60 * 60 * 1000).toISOString(), socialAccount: { platform: "TWITTER", accountName: "@company" } },
+      { scheduledFor: new Date(Date.now() + 2 * 24 * 60 * 60 * 1000).toISOString(), socialAccount: { platform: "LINKEDIN", accountName: "Company Page" } },
     ],
     _count: { comments: 3, publishedPosts: 0 },
   },
   {
     id: "2",
-    content:
-      "Check out our new features designed to help you work smarter, not harder! Link in bio.",
+    content: "Check out our new features designed to help you work smarter, not harder! Link in bio.",
     status: "DRAFT",
     createdAt: new Date(Date.now() - 1 * 24 * 60 * 60 * 1000).toISOString(),
     updatedAt: new Date().toISOString(),
@@ -85,8 +81,7 @@ const MOCK_POSTS: Post[] = [
   },
   {
     id: "3",
-    content:
-      "Early bird discounts are here! Don't miss out on our holiday deals. Save up to 50% on all products.",
+    content: "Early bird discounts are here! Don't miss out on our holiday deals. Save up to 50% on all products.",
     status: "IN_REVIEW",
     createdAt: new Date(Date.now() - 3 * 24 * 60 * 60 * 1000).toISOString(),
     updatedAt: new Date(Date.now() - 12 * 60 * 60 * 1000).toISOString(),
@@ -97,8 +92,7 @@ const MOCK_POSTS: Post[] = [
   },
   {
     id: "4",
-    content:
-      "Thank you to our amazing customers for helping us reach 10,000 followers! Here's to many more milestones together.",
+    content: "Thank you to our amazing customers for helping us reach 10,000 followers! Here's to many more milestones together.",
     status: "PUBLISHED",
     createdAt: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString(),
     updatedAt: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString(),
@@ -109,188 +103,204 @@ const MOCK_POSTS: Post[] = [
   },
 ];
 
+const STATUS_TABS = [
+  { value: "all", label: "All", count: MOCK_POSTS.length },
+  { value: "DRAFT", label: "Drafts", count: MOCK_POSTS.filter((p) => p.status === "DRAFT").length },
+  { value: "IN_REVIEW", label: "In Review", count: MOCK_POSTS.filter((p) => p.status === "IN_REVIEW").length },
+  { value: "SCHEDULED", label: "Scheduled", count: MOCK_POSTS.filter((p) => p.status === "SCHEDULED").length },
+  { value: "PUBLISHED", label: "Published", count: MOCK_POSTS.filter((p) => p.status === "PUBLISHED").length },
+];
+
+function formatDate(date: string) {
+  return new Date(date).toLocaleDateString("en-US", { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" });
+}
+
+function truncateText(text: string, maxLength = 120) {
+  if (text.length <= maxLength) return text;
+  return text.slice(0, maxLength) + "...";
+}
+
 export default function PostsPage() {
-  const [posts, setPosts] = useState<Post[]>(MOCK_POSTS);
+  const [posts] = useState<Post[]>(MOCK_POSTS);
   const [searchQuery, setSearchQuery] = useState("");
-  const [statusFilter, setStatusFilter] = useState("all");
-  const [campaignFilter, setCampaignFilter] = useState("all");
+  const [activeTab, setActiveTab] = useState("all");
 
   const filteredPosts = posts.filter((post) => {
-    const matchesSearch = post.content
-      .toLowerCase()
-      .includes(searchQuery.toLowerCase());
-    const matchesStatus =
-      statusFilter === "all" || post.status === statusFilter;
-    const matchesCampaign =
-      campaignFilter === "all" ||
-      (campaignFilter === "none" && !post.campaign) ||
-      post.campaign?.id === campaignFilter;
-    return matchesSearch && matchesStatus && matchesCampaign;
+    const matchesSearch = post.content.toLowerCase().includes(searchQuery.toLowerCase());
+    const matchesTab = activeTab === "all" || post.status === activeTab;
+    return matchesSearch && matchesTab;
   });
-
-  const postsByStatus = {
-    all: posts,
-    DRAFT: posts.filter((p) => p.status === "DRAFT"),
-    IN_REVIEW: posts.filter((p) => p.status === "IN_REVIEW"),
-    APPROVED: posts.filter((p) => p.status === "APPROVED"),
-    SCHEDULED: posts.filter((p) => p.status === "SCHEDULED"),
-    PUBLISHED: posts.filter((p) => p.status === "PUBLISHED"),
-  };
 
   return (
     <DashboardLayout title="Posts">
-      <div className="space-y-6">
-        {/* Filters */}
-        <div className="flex items-center gap-4">
-          <div className="relative flex-1 max-w-md">
-            <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
-            <Input
-              placeholder="Search posts..."
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              className="pl-9"
-            />
-          </div>
-          <Select
-            value={campaignFilter}
-            onChange={(e) => setCampaignFilter(e.target.value)}
-          >
-            <option value="all">All Campaigns</option>
-            <option value="none">No Campaign</option>
-            <option value="1">Product Launch</option>
-            <option value="2">Holiday Sale</option>
-          </Select>
-        </div>
+      {/* Filter bar */}
+      <Box sx={{ display: "flex", alignItems: "center", gap: 2, mb: 3 }}>
+        <TextField
+          placeholder="Search posts..."
+          size="small"
+          value={searchQuery}
+          onChange={(e) => setSearchQuery(e.target.value)}
+          sx={{ width: 280 }}
+          InputProps={{
+            startAdornment: (
+              <InputAdornment position="start">
+                <Search sx={{ fontSize: 18, color: "text.secondary" }} />
+              </InputAdornment>
+            ),
+          }}
+        />
+        <Box sx={{ flex: 1 }} />
+        <Box className="segmented-control">
+          {STATUS_TABS.map((tab) => (
+            <button
+              key={tab.value}
+              className={`segmented-control-item ${activeTab === tab.value ? "active" : ""}`}
+              onClick={() => setActiveTab(tab.value)}
+            >
+              {tab.label} ({tab.count})
+            </button>
+          ))}
+        </Box>
+      </Box>
 
-        {/* Tabs */}
-        <Tabs defaultValue="all" onValueChange={setStatusFilter}>
-          <TabsList>
-            <TabsTrigger value="all">
-              All ({posts.length})
-            </TabsTrigger>
-            <TabsTrigger value="DRAFT">
-              Drafts ({postsByStatus.DRAFT.length})
-            </TabsTrigger>
-            <TabsTrigger value="IN_REVIEW">
-              In Review ({postsByStatus.IN_REVIEW.length})
-            </TabsTrigger>
-            <TabsTrigger value="APPROVED">
-              Approved ({postsByStatus.APPROVED.length})
-            </TabsTrigger>
-            <TabsTrigger value="SCHEDULED">
-              Scheduled ({postsByStatus.SCHEDULED.length})
-            </TabsTrigger>
-            <TabsTrigger value="PUBLISHED">
-              Published ({postsByStatus.PUBLISHED.length})
-            </TabsTrigger>
-          </TabsList>
+      {/* Posts list - dense rows */}
+      <Box sx={{ display: "flex", flexDirection: "column", gap: 1 }}>
+        {filteredPosts.map((post) => {
+          const statusConfig = STATUS_CONFIG[post.status];
+          return (
+            <Paper
+              key={post.id}
+              component={Link}
+              href={`/posts/${post.id}`}
+              sx={{
+                display: "flex",
+                alignItems: "center",
+                gap: 2,
+                p: 2,
+                borderRadius: 1.5,
+                border: "1px solid",
+                borderColor: "divider",
+                bgcolor: "white",
+                textDecoration: "none",
+                transition: "all 0.15s ease",
+                "&:hover": {
+                  borderColor: "primary.main",
+                  boxShadow: "0 1px 3px rgba(0,0,0,0.05)",
+                },
+              }}
+            >
+              {/* Avatar */}
+              <Avatar
+                src={post.creator.image || undefined}
+                sx={{ width: 32, height: 32, fontSize: "12px" }}
+              >
+                {(post.creator.name || post.creator.email).charAt(0).toUpperCase()}
+              </Avatar>
 
-          <TabsContent value={statusFilter} className="mt-6">
-            {filteredPosts.length > 0 ? (
-              <div className="space-y-4">
-                {filteredPosts.map((post) => (
-                  <div
-                    key={post.id}
-                    className="rounded-xl border border-gray-200 bg-white p-6 hover:border-gray-300 transition-colors"
-                  >
-                    <div className="flex items-start gap-4">
-                      <Avatar
-                        name={post.creator.name || post.creator.email}
-                        size="md"
-                      />
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-center gap-2 mb-2">
-                          <span className="font-medium text-gray-900">
-                            {post.creator.name || post.creator.email}
-                          </span>
-                          <span className="text-gray-400">·</span>
-                          <span className="text-sm text-gray-500">
-                            {formatDate(post.updatedAt)}
-                          </span>
-                          <Badge
-                            className={STATUS_COLORS[post.status]}
-                            variant="secondary"
-                          >
-                            {post.status.replace("_", " ")}
-                          </Badge>
-                          {post.campaign && (
-                            <span
-                              className="text-xs px-2 py-0.5 rounded-full"
-                              style={{
-                                backgroundColor: `${post.campaign.color}20`,
-                                color: post.campaign.color,
-                              }}
-                            >
-                              {post.campaign.name}
-                            </span>
-                          )}
-                        </div>
+              {/* Content */}
+              <Box sx={{ flex: 1, minWidth: 0 }}>
+                <Box sx={{ display: "flex", alignItems: "center", gap: 1, mb: 0.5 }}>
+                  <Typography variant="body2" sx={{ fontWeight: 500, color: "text.primary" }}>
+                    {post.creator.name || post.creator.email}
+                  </Typography>
+                  <Typography variant="caption" color="text.secondary">
+                    {formatDate(post.updatedAt)}
+                  </Typography>
+                  <Chip
+                    label={statusConfig.label}
+                    size="small"
+                    sx={{
+                      height: 20,
+                      fontSize: "11px",
+                      fontWeight: 500,
+                      bgcolor: statusConfig.bg,
+                      color: statusConfig.text,
+                    }}
+                  />
+                  {post.campaign && (
+                    <Chip
+                      label={post.campaign.name}
+                      size="small"
+                      variant="outlined"
+                      sx={{
+                        height: 20,
+                        fontSize: "11px",
+                        borderColor: alpha(post.campaign.color, 0.3),
+                        color: post.campaign.color,
+                      }}
+                    />
+                  )}
+                </Box>
+                <Typography
+                  variant="body2"
+                  color="text.secondary"
+                  sx={{
+                    overflow: "hidden",
+                    textOverflow: "ellipsis",
+                    whiteSpace: "nowrap",
+                  }}
+                >
+                  {truncateText(post.content)}
+                </Typography>
+              </Box>
 
-                        <p className="text-gray-900 mb-4">{post.content}</p>
+              {/* Meta info */}
+              <Box sx={{ display: "flex", alignItems: "center", gap: 2 }}>
+                {post.scheduledPosts.length > 0 && (
+                  <Box sx={{ display: "flex", alignItems: "center", gap: 0.5 }}>
+                    <Event sx={{ fontSize: 14, color: "text.secondary" }} />
+                    <Typography variant="caption" color="text.secondary">
+                      {formatDate(post.scheduledPosts[0].scheduledFor)}
+                    </Typography>
+                  </Box>
+                )}
+                {post._count.comments > 0 && (
+                  <Box sx={{ display: "flex", alignItems: "center", gap: 0.5 }}>
+                    <ChatBubbleOutline sx={{ fontSize: 14, color: "text.secondary" }} />
+                    <Typography variant="caption" color="text.secondary">
+                      {post._count.comments}
+                    </Typography>
+                  </Box>
+                )}
+                {post._count.publishedPosts > 0 && (
+                  <Box sx={{ display: "flex", alignItems: "center", gap: 0.5 }}>
+                    <VisibilityOutlined sx={{ fontSize: 14, color: "text.secondary" }} />
+                    <Typography variant="caption" color="text.secondary">
+                      {post._count.publishedPosts}
+                    </Typography>
+                  </Box>
+                )}
+              </Box>
 
-                        <div className="flex items-center gap-6 text-sm text-gray-500">
-                          {post.scheduledPosts.length > 0 && (
-                            <div className="flex items-center gap-1">
-                              <Calendar className="h-4 w-4" />
-                              <span>
-                                Scheduled for{" "}
-                                {formatDate(post.scheduledPosts[0].scheduledFor)}
-                              </span>
-                              {post.scheduledPosts.length > 1 && (
-                                <span className="text-gray-400">
-                                  +{post.scheduledPosts.length - 1} more
-                                </span>
-                              )}
-                            </div>
-                          )}
-                          <div className="flex items-center gap-1">
-                            <MessageSquare className="h-4 w-4" />
-                            <span>{post._count.comments} comments</span>
-                          </div>
-                          {post._count.publishedPosts > 0 && (
-                            <div className="flex items-center gap-1">
-                              <Eye className="h-4 w-4" />
-                              <span>
-                                Published to {post._count.publishedPosts} platforms
-                              </span>
-                            </div>
-                          )}
-                        </div>
-                      </div>
+              {/* Actions */}
+              <IconButton
+                size="small"
+                sx={{
+                  opacity: 0,
+                  transition: "opacity 0.15s ease",
+                  ".group:hover &": { opacity: 1 },
+                }}
+              >
+                <MoreVert sx={{ fontSize: 18 }} />
+              </IconButton>
+            </Paper>
+          );
+        })}
 
-                      <div className="flex items-center gap-2">
-                        <Link href={`/posts/${post.id}`}>
-                          <Button variant="outline" size="sm">
-                            Edit
-                          </Button>
-                        </Link>
-                        <Button variant="ghost" size="icon">
-                          <MoreVertical className="h-4 w-4" />
-                        </Button>
-                      </div>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            ) : (
-              <div className="rounded-xl border border-gray-200 bg-white p-12 text-center">
-                <FileText className="h-12 w-12 mx-auto mb-4 text-gray-400" />
-                <h3 className="text-lg font-medium text-gray-900 mb-2">
-                  No posts found
-                </h3>
-                <p className="text-gray-500 mb-4">
-                  {searchQuery || statusFilter !== "all"
-                    ? "Try adjusting your filters"
-                    : "Create your first post to get started"}
-                </p>
-                <Link href="/posts/new">
-                  <Button>Create Post</Button>
-                </Link>
-              </div>
-            )}
-          </TabsContent>
-        </Tabs>
-      </div>
+        {filteredPosts.length === 0 && (
+          <Box className="empty-state">
+            <Box className="empty-state-icon">
+              <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+              </svg>
+            </Box>
+            <Typography className="empty-state-title">No posts found</Typography>
+            <Typography className="empty-state-description">
+              {searchQuery ? "Try adjusting your search" : "Create your first post to get started"}
+            </Typography>
+          </Box>
+        )}
+      </Box>
     </DashboardLayout>
   );
 }

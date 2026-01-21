@@ -30,7 +30,7 @@ export function DashboardLayout({
           flexDirection: "column",
           flex: 1,
           overflow: "hidden",
-          ml: "260px", // Match drawer width
+          ml: "240px",
         }}
       >
         <Header title={title} showNewPost={showNewPost} />
@@ -39,10 +39,12 @@ export function DashboardLayout({
           sx={{
             flex: 1,
             overflow: "auto",
-            p: 3,
+            py: 3,
           }}
         >
-          {children}
+          <Box className="page-container">
+            {children}
+          </Box>
         </Box>
       </Box>
     </Box>

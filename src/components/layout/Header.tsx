@@ -47,13 +47,14 @@ export function Header({ title, showNewPost = true }: HeaderProps) {
         borderColor: "divider",
       }}
     >
-      <Toolbar sx={{ gap: 2, px: 3 }}>
-        {/* Title */}
+      <Toolbar sx={{ gap: 2, px: 3, minHeight: "64px" }}>
+        {/* Page title - subtle */}
         <Typography
-          variant="h5"
+          variant="h6"
           component="h1"
           sx={{
             fontWeight: 600,
+            fontSize: "16px",
             color: "text.primary",
             letterSpacing: "-0.01em",
           }}
@@ -68,26 +69,22 @@ export function Header({ title, showNewPost = true }: HeaderProps) {
         <Box
           sx={{
             position: "relative",
-            borderRadius: 2.5,
+            borderRadius: 1.5,
             bgcolor: "grey.100",
-            "&:hover": {
-              bgcolor: "grey.200",
-            },
+            width: 220,
+            transition: "all 0.15s ease",
             "&:focus-within": {
               bgcolor: "background.paper",
               boxShadow: (theme) => `0 0 0 2px ${alpha(theme.palette.primary.main, 0.2)}`,
               border: "1px solid",
               borderColor: "primary.main",
             },
-            border: "1px solid transparent",
-            transition: "all 0.2s ease",
-            width: 280,
           }}
         >
           <Box
             sx={{
               position: "absolute",
-              left: 12,
+              left: 10,
               top: "50%",
               transform: "translateY(-50%)",
               display: "flex",
@@ -95,16 +92,16 @@ export function Header({ title, showNewPost = true }: HeaderProps) {
               color: "text.secondary",
             }}
           >
-            <Search sx={{ fontSize: 20 }} />
+            <Search sx={{ fontSize: 18 }} />
           </Box>
           <InputBase
             placeholder="Search..."
             sx={{
               width: "100%",
               py: 1,
-              pl: 5,
+              pl: 4.5,
               pr: 2,
-              fontSize: "0.875rem",
+              fontSize: "13px",
               "& input::placeholder": {
                 color: "text.secondary",
                 opacity: 1,
@@ -113,17 +110,19 @@ export function Header({ title, showNewPost = true }: HeaderProps) {
           />
         </Box>
 
-        {/* New Post Button */}
+        {/* New Post Button - primary action */}
         {showNewPost && (
           <Button
             component={Link}
             href="/posts/new"
             variant="contained"
-            startIcon={<Add />}
+            startIcon={<Add sx={{ fontSize: 18 }} />}
             sx={{
               px: 2.5,
               py: 1,
               fontWeight: 500,
+              fontSize: "13px",
+              borderRadius: 1.5,
             }}
           >
             New Post
@@ -133,6 +132,8 @@ export function Header({ title, showNewPost = true }: HeaderProps) {
         {/* Notifications */}
         <IconButton
           sx={{
+            width: 36,
+            height: 36,
             color: "text.secondary",
             "&:hover": {
               bgcolor: "grey.100",
@@ -142,15 +143,14 @@ export function Header({ title, showNewPost = true }: HeaderProps) {
           <Badge
             variant="dot"
             color="error"
-            overlap="circular"
             sx={{
               "& .MuiBadge-badge": {
-                top: 4,
-                right: 4,
+                top: 3,
+                right: 3,
               },
             }}
           >
-            <NotificationsOutlined />
+            <NotificationsOutlined sx={{ fontSize: 20 }} />
           </Badge>
         </IconButton>
 
@@ -158,15 +158,15 @@ export function Header({ title, showNewPost = true }: HeaderProps) {
         <Avatar
           src={session?.user?.image || undefined}
           sx={{
-            width: 38,
-            height: 38,
+            width: 34,
+            height: 34,
             bgcolor: "primary.main",
-            fontSize: "0.875rem",
+            fontSize: "12px",
             fontWeight: 600,
             cursor: "pointer",
-            transition: "box-shadow 0.2s ease",
+            transition: "box-shadow 0.15s ease",
             "&:hover": {
-              boxShadow: 2,
+              boxShadow: "0 1px 3px rgba(0,0,0,0.1)",
             },
           }}
         >
