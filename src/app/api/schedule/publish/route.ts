@@ -4,6 +4,44 @@ import prisma from "@/lib/prisma";
 import { createSocialClient } from "@/lib/social/mock-client";
 import { Platform } from "@/lib/social/types";
 
+function parseMediaUrls(mediaUrls: string | string[]): string[] {
+  if (Array.isArray(mediaUrls)) return mediaUrls;
+  try {
+    return JSON.parse(mediaUrls || "[]");
+  } catch {
+    return [];
+  }
+}
+
+interface ScheduledPostWithRelations {
+  id: string;
+  postId: string;
+  socialAccountId: string;
+  scheduledFor: Date;
+  status: string;
+  publishedAt: Date | null;
+  post: {
+    id: string;
+    content: string;
+    mediaUrls: string;
+    workspaceId: string;
+    platformContents: Array<{
+      id: string;
+      postId: string;
+      platform: string;
+      content: string;
+      mediaUrls: string;
+      excluded: boolean;
+    }>;
+  };
+  socialAccount: {
+    id: string;
+    platform: string;
+    accountId: string;
+    accountName: string;
+  };
+}
+
 export async function POST(req: NextRequest) {
   try {
     const session = await auth();
@@ -20,22 +58,27 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    const scheduledPost = await prisma.scheduledPost.findUnique({
+    const scheduledPostResult = await prisma.scheduledPost.findUnique({
       where: { id: scheduledPostId },
       include: {
-        post: true,
+        post: {
+          include: {
+            platformContents: true,
+          },
+        },
         socialAccount: true,
       },
     });
 
-    if (!scheduledPost) {
+    if (!scheduledPostResult) {
       return NextResponse.json(
         { error: "Scheduled post not found" },
         { status: 404 }
       );
     }
 
-    // Verify user has access to workspace
+    const scheduledPost = scheduledPostResult as unknown as ScheduledPostWithRelations;
+
     const membership = await prisma.workspaceMember.findUnique({
       where: {
         workspaceId_userId: {
@@ -49,23 +92,46 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "Access denied" }, { status: 403 });
     }
 
-    // Update status to publishing
     await prisma.scheduledPost.update({
       where: { id: scheduledPostId },
       data: { status: "PUBLISHING" },
     });
 
-    // Publish using mock client
-    const client = createSocialClient(
-      scheduledPost.socialAccount.platform as Platform
-    );
-    const result = await client.publish(
-      scheduledPost.post.content,
-      scheduledPost.post.mediaUrls
+    const platform = scheduledPost.socialAccount.platform as Platform;
+    const platformContent = scheduledPost.post.platformContents.find(
+      (pc) => pc.platform === platform
     );
 
+    let content = scheduledPost.post.content;
+    let mediaUrls: string[] = parseMediaUrls(scheduledPost.post.mediaUrls);
+
+    if (platformContent) {
+      if (platformContent.excluded) {
+        await prisma.scheduledPost.update({
+          where: { id: scheduledPostId },
+          data: { status: "SKIPPED" },
+        });
+        return NextResponse.json({
+          success: true,
+          skipped: true,
+          message: `Post was excluded from ${platform}`,
+        });
+      }
+
+      if (platformContent.content) {
+        content = platformContent.content;
+      }
+
+      const platformMediaUrls = parseMediaUrls(platformContent.mediaUrls);
+      if (platformMediaUrls.length > 0) {
+        mediaUrls = platformMediaUrls;
+      }
+    }
+
+    const client = createSocialClient(platform);
+    const result = await client.publish(content, mediaUrls);
+
     if (result.success) {
-      // Create published post record
       const publishedPost = await prisma.publishedPost.create({
         data: {
           postId: scheduledPost.postId,
@@ -76,7 +142,6 @@ export async function POST(req: NextRequest) {
         },
       });
 
-      // Update scheduled post status
       await prisma.scheduledPost.update({
         where: { id: scheduledPostId },
         data: {
@@ -85,13 +150,11 @@ export async function POST(req: NextRequest) {
         },
       });
 
-      // Update post status
       await prisma.post.update({
         where: { id: scheduledPost.postId },
         data: { status: "PUBLISHED" },
       });
 
-      // Generate initial mock analytics
       const analytics = await client.getAnalytics(result.platformPostId!);
       await prisma.analytics.create({
         data: {
@@ -106,7 +169,6 @@ export async function POST(req: NextRequest) {
         platformUrl: result.platformUrl,
       });
     } else {
-      // Update status to failed
       await prisma.scheduledPost.update({
         where: { id: scheduledPostId },
         data: { status: "FAILED" },

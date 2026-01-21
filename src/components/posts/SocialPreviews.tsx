@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo } from "react";
+import { useState, useCallback, useEffect, useMemo } from "react";
 import "@/styles/social-previews.css";
 import {
   TwitterPostPreview,
@@ -10,9 +10,11 @@ import {
 } from "@automattic/social-previews";
 import type { MediaItem } from "./MediaCarousel";
 import { cn } from "@/lib/utils";
+import { Platform } from "@/types";
+import { getPlatformConfig } from "@/lib/social/platform-config";
 
 interface SocialPreviewsProps {
-  platform: "TWITTER" | "LINKEDIN" | "FACEBOOK" | "INSTAGRAM";
+  platform: Platform;
   content: string;
   media: MediaItem[];
   userName?: string;
@@ -20,22 +22,6 @@ interface SocialPreviewsProps {
   userImage?: string;
   className?: string;
 }
-
-// Platform character limits
-const PLATFORM_LIMITS = {
-  TWITTER: 280,
-  LINKEDIN: 3000,
-  FACEBOOK: 63206,
-  INSTAGRAM: 2200,
-};
-
-// Platform media limits
-const PLATFORM_MEDIA_LIMITS = {
-  TWITTER: 4,
-  LINKEDIN: 9,
-  FACEBOOK: 10,
-  INSTAGRAM: 10,
-};
 
 export function SocialPreview({
   platform,
@@ -46,12 +32,11 @@ export function SocialPreview({
   userImage = "",
   className,
 }: SocialPreviewsProps) {
-  const limit = PLATFORM_LIMITS[platform];
-  const mediaLimit = PLATFORM_MEDIA_LIMITS[platform];
-  const isOverLimit = content.length > limit;
+  const config = getPlatformConfig(platform);
+  const mediaLimit = config.mediaLimit;
+  const isOverLimit = content.length > config.characterLimit;
   const hasMedia = media.length > 0;
 
-  // Convert our media format to the library's format
   const formattedMedia = useMemo(() => {
     return media.slice(0, mediaLimit).map((item) => ({
       url: item.url,
@@ -62,14 +47,12 @@ export function SocialPreview({
 
   const firstImage = formattedMedia[0]?.url;
 
-  // Default profile image placeholder
   const profileImage =
     userImage ||
     `https://ui-avatars.com/api/?name=${encodeURIComponent(userName)}&background=random&size=200`;
 
   return (
     <div className={cn("relative", className)}>
-      {/* Platform Header */}
       <div className="flex items-center justify-between mb-3">
         <div className="flex items-center gap-2">
           <PlatformIcon platform={platform} />
@@ -79,15 +62,14 @@ export function SocialPreview({
         </div>
         <div className="flex items-center gap-2 text-xs">
           <span className={cn(isOverLimit ? "text-red-500 font-medium" : "text-gray-500")}>
-            {content.length} / {limit}
+            {content.length} / {config.characterLimit}
           </span>
           {isOverLimit && (
-            <span className="text-red-500">({content.length - limit} over)</span>
+            <span className="text-red-500">({content.length - config.characterLimit} over)</span>
           )}
         </div>
       </div>
 
-      {/* Preview Container */}
       <div className="border border-gray-200 rounded-xl overflow-hidden bg-white shadow-sm">
         {platform === "TWITTER" && (
           <div className="social-preview-twitter">
@@ -136,12 +118,10 @@ export function SocialPreview({
         {platform === "INSTAGRAM" && (
           <div className="social-preview-instagram">
             {hasMedia ? (
-              <InstagramPostPreview
+              <InstagramCarousel
                 name={userName}
                 profileImage={profileImage}
                 caption={content}
-                url=""
-                image={firstImage}
                 media={formattedMedia}
               />
             ) : (
@@ -157,7 +137,6 @@ export function SocialPreview({
         )}
       </div>
 
-      {/* Warnings */}
       {platform === "INSTAGRAM" && !hasMedia && (
         <div className="mt-2 text-xs text-amber-600 bg-amber-50 rounded-lg px-3 py-2">
           ⚠️ Instagram requires at least one image or video to post
@@ -172,9 +151,172 @@ export function SocialPreview({
 
       {isOverLimit && (
         <div className="mt-2 text-xs text-red-600 bg-red-50 rounded-lg px-3 py-2">
-          ⚠️ Content exceeds {platform === "TWITTER" ? "X" : platform.charAt(0) + platform.slice(1).toLowerCase()}'s character limit by {content.length - limit} characters
+          ⚠️ Content exceeds {platform === "TWITTER" ? "X" : platform.charAt(0) + platform.slice(1).toLowerCase()}'s character limit by {content.length - config.characterLimit} characters
         </div>
       )}
+    </div>
+  );
+}
+
+interface InstagramCarouselProps {
+  name: string;
+  profileImage: string;
+  caption: string;
+  media: Array<{ url: string; alt: string; type: string }>;
+}
+
+function InstagramCarousel({ name, profileImage, caption, media }: InstagramCarouselProps) {
+  const [currentIndex, setCurrentIndex] = useState(0);
+  const [touchStart, setTouchStart] = useState<number | null>(null);
+  const [touchEnd, setTouchEnd] = useState<number | null>(null);
+
+  const hasMultiple = media.length > 1;
+
+  const goToNext = useCallback(() => {
+    setCurrentIndex((prev) => (prev + 1) % media.length);
+  }, [media.length]);
+
+  const goToPrev = useCallback(() => {
+    setCurrentIndex((prev) => (prev - 1 + media.length) % media.length);
+  }, [media.length]);
+
+  const goToIndex = useCallback((index: number) => {
+    setCurrentIndex(index);
+  }, []);
+
+  useEffect(() => {
+    if (!hasMultiple) return;
+
+    const interval = setInterval(goToNext, 5000);
+    return () => clearInterval(interval);
+  }, [hasMultiple, goToNext]);
+
+  const handleTouchStart = (e: React.TouchEvent) => {
+    setTouchStart(e.touches[0]?.clientX ?? null);
+  };
+
+  const handleTouchMove = (e: React.TouchEvent) => {
+    setTouchEnd(e.touches[0]?.clientX ?? null);
+  };
+
+  const handleTouchEnd = useCallback(() => {
+    if (!touchStart || !touchEnd) return;
+    const distance = touchStart - touchEnd;
+    const minSwipeDistance = 50;
+
+    if (distance > minSwipeDistance) {
+      goToNext();
+    } else if (distance < -minSwipeDistance) {
+      goToPrev();
+    }
+
+    setTouchStart(null);
+    setTouchEnd(null);
+  }, [touchStart, touchEnd, goToNext, goToPrev]);
+
+  const handleKeyDown = useCallback(
+    (e: KeyboardEvent) => {
+      if (e.key === "ArrowLeft") {
+        goToPrev();
+      } else if (e.key === "ArrowRight") {
+        goToNext();
+      }
+    },
+    [goToPrev, goToNext]
+  );
+
+  useEffect(() => {
+    if (!hasMultiple) return;
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [hasMultiple, handleKeyDown]);
+
+  return (
+    <div
+      className="relative"
+      onTouchStart={handleTouchStart}
+      onTouchMove={handleTouchMove}
+      onTouchEnd={handleTouchEnd}
+    >
+      <div className="relative aspect-square overflow-hidden bg-gray-100">
+        {media.map((item, index) => (
+          <div
+            key={index}
+            className={cn(
+              "absolute inset-0 transition-opacity duration-300",
+              index === currentIndex ? "opacity-100 z-10" : "opacity-0 z-0"
+            )}
+          >
+            {item.type.includes("video") ? (
+              <video src={item.url} className="w-full h-full object-cover" controls />
+            ) : (
+              <img
+                src={item.url}
+                alt={item.alt || `Image ${index + 1}`}
+                className="w-full h-full object-cover"
+              />
+            )}
+          </div>
+        ))}
+
+        {hasMultiple && (
+          <>
+            <button
+              onClick={goToPrev}
+              className="absolute left-2 top-1/2 -translate-y-1/2 z-20 w-8 h-8 bg-black/50 hover:bg-black/70 rounded-full flex items-center justify-center text-white transition-colors"
+              aria-label="Previous image"
+            >
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+              </svg>
+            </button>
+            <button
+              onClick={goToNext}
+              className="absolute right-2 top-1/2 -translate-y-1/2 z-20 w-8 h-8 bg-black/50 hover:bg-black/70 rounded-full flex items-center justify-center text-white transition-colors"
+              aria-label="Next image"
+            >
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+              </svg>
+            </button>
+
+            <div className="absolute bottom-4 left-1/2 -translate-x-1/2 z-20 flex items-center gap-1.5">
+              {media.map((_, index) => (
+                <button
+                  key={index}
+                  onClick={() => goToIndex(index)}
+                  className={cn(
+                    "w-2 h-2 rounded-full transition-all",
+                    index === currentIndex
+                      ? "bg-white w-3"
+                      : "bg-white/50 hover:bg-white/75"
+                  )}
+                  aria-label={`Go to image ${index + 1}`}
+                />
+              ))}
+            </div>
+
+            <div className="absolute top-4 right-4 z-20 px-2 py-1 bg-black/50 rounded-full text-white text-xs font-medium">
+              {currentIndex + 1} / {media.length}
+            </div>
+          </>
+        )}
+      </div>
+
+      <div className="p-3">
+        <div className="flex items-center gap-2 mb-2">
+          <img
+            src={profileImage}
+            alt={name}
+            className="w-8 h-8 rounded-full object-cover"
+          />
+          <span className="font-semibold text-sm">{name}</span>
+        </div>
+        <p className="text-sm text-gray-800">
+          <span className="font-semibold mr-2">{name}</span>
+          {caption}
+        </p>
+      </div>
     </div>
   );
 }
@@ -225,6 +367,3 @@ function InstagramIcon({ className }: { className?: string }) {
     </svg>
   );
 }
-
-// Export platform limits for use elsewhere
-export { PLATFORM_LIMITS, PLATFORM_MEDIA_LIMITS };

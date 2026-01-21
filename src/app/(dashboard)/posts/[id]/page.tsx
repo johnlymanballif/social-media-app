@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import {
@@ -19,6 +19,8 @@ import {
   InputLabel,
   Select,
   MenuItem,
+  Tab,
+  Tabs,
   alpha,
 } from "@mui/material";
 import {
@@ -29,10 +31,15 @@ import {
   Close,
   Visibility,
   ChatBubbleOutline,
+  Edit,
 } from "@mui/icons-material";
 import { DashboardLayout } from "@/components/layout/DashboardLayout";
 import { MediaCarousel, type MediaItem } from "@/components/posts/MediaCarousel";
 import { SocialPreview } from "@/components/posts/SocialPreviews";
+import { PlatformContentEditor } from "@/components/posts/PlatformContentEditor";
+import { usePlatformContent } from "@/hooks/usePlatformContent";
+import { Platform, PlatformContent as PlatformContentType } from "@/types";
+import { mergePostWithPlatformContent } from "@/types";
 
 const STATUS_CONFIG: Record<string, { color: "default" | "warning" | "success" | "info" | "error"; label: string }> = {
   DRAFT: { color: "default", label: "Draft" },
@@ -51,14 +58,17 @@ interface Comment {
 }
 
 const PLATFORMS = ["TWITTER", "LINKEDIN", "FACEBOOK", "INSTAGRAM"] as const;
-type Platform = (typeof PLATFORMS)[number];
+type PlatformType = (typeof PLATFORMS)[number];
 
-const PLATFORM_LABELS: Record<Platform, string> = {
+const PLATFORM_LABELS: Record<PlatformType, string> = {
   TWITTER: "X",
   LINKEDIN: "LinkedIn",
   FACEBOOK: "Facebook",
   INSTAGRAM: "Instagram",
 };
+
+const EDITOR_TABS = ["global", ...PLATFORMS] as const;
+type EditorTab = (typeof EDITOR_TABS)[number];
 
 export default function PostEditorPage() {
   const params = useParams();
@@ -71,12 +81,30 @@ export default function PostEditorPage() {
   const [campaignId, setCampaignId] = useState("");
   const [comments, setComments] = useState<Comment[]>([]);
   const [newComment, setNewComment] = useState("");
-  const [selectedPlatforms, setSelectedPlatforms] = useState<Platform[]>([]);
+  const [selectedPlatforms, setSelectedPlatforms] = useState<PlatformType[]>([]);
   const [scheduledDate, setScheduledDate] = useState("");
   const [scheduledTime, setScheduledTime] = useState("");
   const [saving, setSaving] = useState(false);
-  const [activePreviewPlatform, setActivePreviewPlatform] = useState<Platform>("TWITTER");
+  const [activePreviewPlatform, setActivePreviewPlatform] = useState<PlatformType>("TWITTER");
   const [showComments, setShowComments] = useState(false);
+  const [editorTab, setEditorTab] = useState<EditorTab>("global");
+
+  const {
+    platformContents,
+    isLoading: isLoadingPlatformContent,
+    isSaving: isSavingPlatformContent,
+    getPlatformContent,
+    updatePlatformContent,
+    resetPlatformContent,
+    isPlatformCustomized,
+  } = usePlatformContent({
+    postId: params.id as string,
+    initialContent: content,
+    initialMediaUrls: media.map((m) => m.url),
+    onError: (error) => {
+      console.error("Platform content error:", error);
+    },
+  });
 
   useEffect(() => {
     if (!isNew) {
@@ -110,34 +138,39 @@ export default function PostEditorPage() {
     }
   }, [isNew]);
 
-  function handleSave() {
+  const handleSave = useCallback(async () => {
     setSaving(true);
-    setTimeout(() => {
+    try {
+      if (isNew) {
+        router.push("/posts");
+      } else {
+        await new Promise((resolve) => setTimeout(resolve, 1000));
+      }
+    } finally {
       setSaving(false);
-      if (isNew) router.push("/posts");
-    }, 1000);
-  }
+    }
+  }, [isNew, router]);
 
-  function handleSubmitForReview() {
+  const handleSubmitForReview = () => {
     setStatus("IN_REVIEW");
     handleSave();
-  }
+  };
 
-  function handleApprove() {
+  const handleApprove = () => {
     setStatus("APPROVED");
     handleSave();
-  }
+  };
 
-  function handleSchedule() {
+  const handleSchedule = () => {
     if (!scheduledDate || !scheduledTime || selectedPlatforms.length === 0) {
       alert("Please select date, time, and at least one platform");
       return;
     }
     setStatus("SCHEDULED");
     handleSave();
-  }
+  };
 
-  function handleAddComment() {
+  const handleAddComment = () => {
     if (!newComment.trim()) return;
     setComments([
       ...comments,
@@ -149,13 +182,31 @@ export default function PostEditorPage() {
       },
     ]);
     setNewComment("");
-  }
+  };
 
-  function togglePlatform(platform: Platform) {
+  const togglePlatform = (platform: PlatformType) => {
     setSelectedPlatforms((prev) =>
       prev.includes(platform) ? prev.filter((p) => p !== platform) : [...prev, platform]
     );
-  }
+  };
+
+  const handlePlatformContentChange = useCallback(
+    async (platform: PlatformType, data: { content: string; mediaUrls: string[]; excluded: boolean }) => {
+      await updatePlatformContent(platform, {
+        content: data.content,
+        mediaUrls: data.mediaUrls as any,
+        excluded: data.excluded,
+      });
+    },
+    [updatePlatformContent]
+  );
+
+  const handleResetPlatformContent = useCallback(
+    async (platform: PlatformType) => {
+      await resetPlatformContent(platform);
+    },
+    [resetPlatformContent]
+  );
 
   const getInitials = (name: string) => {
     return name.split(" ").map((n) => n[0]).join("").toUpperCase().slice(0, 2);
@@ -168,10 +219,32 @@ export default function PostEditorPage() {
     });
   };
 
+  const getEditorContent = () => {
+    if (editorTab === "global") {
+      return { content, media };
+    }
+    const platform = editorTab as PlatformType;
+    const platformContent = getPlatformContent(platform);
+    return {
+      content: platformContent.content,
+      media: platformContent.mediaUrls.map((url, index) => ({
+        id: `${platform}-${index}`,
+        url,
+        type: "image" as const,
+        alt: "",
+      })),
+    };
+  };
+
+  const editorContent = getEditorContent();
+  const isTabCustomized = (tab: EditorTab) => {
+    if (tab === "global") return false;
+    return isPlatformCustomized(tab as PlatformType);
+  };
+
   return (
     <DashboardLayout title={isNew ? "New Post" : "Edit Post"} showNewPost={false}>
       <Box sx={{ height: "calc(100vh - 64px - 48px)", display: "flex", flexDirection: "column" }}>
-        {/* Header Bar */}
         <Paper
           elevation={0}
           sx={{
@@ -267,9 +340,7 @@ export default function PostEditorPage() {
           </Box>
         </Paper>
 
-        {/* Main Content */}
         <Box sx={{ flex: 1, display: "flex", overflow: "hidden" }}>
-          {/* Left Panel - Editor */}
           <Box
             sx={{
               width: "50%",
@@ -277,48 +348,108 @@ export default function PostEditorPage() {
               borderColor: "divider",
               overflow: "auto",
               bgcolor: "background.paper",
+              display: "flex",
+              flexDirection: "column",
             }}
           >
-            <Box sx={{ p: 3, display: "flex", flexDirection: "column", gap: 4 }}>
-              {/* Media Section */}
-              <Box>
-                <Box sx={{ display: "flex", justifyContent: "space-between", mb: 2 }}>
-                  <Typography variant="subtitle1" sx={{ fontWeight: 600 }}>
-                    Media
-                  </Typography>
-                  <Typography variant="caption" color="text.secondary">
-                    {media.length} {media.length === 1 ? "item" : "items"}
-                  </Typography>
-                </Box>
-                <MediaCarousel media={media} onMediaChange={setMedia} maxItems={10} />
-              </Box>
-
-              {/* Caption Section */}
-              <Box>
-                <Box sx={{ display: "flex", justifyContent: "space-between", mb: 2 }}>
-                  <Typography variant="subtitle1" sx={{ fontWeight: 600 }}>
-                    Caption / Text
-                  </Typography>
-                  <Typography variant="caption" color="text.secondary">
-                    {content.length} characters
-                  </Typography>
-                </Box>
-                <TextField
-                  value={content}
-                  onChange={(e) => setContent(e.target.value)}
-                  placeholder="Write your post caption here..."
-                  multiline
-                  rows={6}
-                  fullWidth
-                  sx={{
-                    "& .MuiOutlinedInput-root": {
-                      fontSize: "1rem",
-                    },
-                  }}
+            <Tabs
+              value={editorTab}
+              onChange={(_, value) => setEditorTab(value)}
+              sx={{
+                borderBottom: "1px solid",
+                borderColor: "divider",
+                px: 2,
+                "& .MuiTab-root": {
+                  textTransform: "none",
+                  fontWeight: 500,
+                  minWidth: 60,
+                  px: 2,
+                },
+              }}
+            >
+              <Tab
+                value="global"
+                label={
+                  <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
+                    <Edit sx={{ fontSize: 16 }} />
+                    Global
+                  </Box>
+                }
+              />
+              {PLATFORMS.map((platform) => (
+                <Tab
+                  key={platform}
+                  value={platform}
+                  label={
+                    <Box sx={{ display: "flex", alignItems: "center", gap: 0.5 }}>
+                      {PLATFORM_LABELS[platform]}
+                      {isTabCustomized(platform) && (
+                        <Chip
+                          label="Custom"
+                          size="small"
+                          color="primary"
+                          sx={{ height: 18, fontSize: "0.65rem", ml: 0.5 }}
+                        />
+                      )}
+                    </Box>
+                  }
                 />
-              </Box>
+              ))}
+            </Tabs>
 
-              {/* Campaign */}
+            <Box sx={{ p: 3, display: "flex", flexDirection: "column", gap: 4 }}>
+              {editorTab === "global" ? (
+                <>
+                  <Box>
+                    <Box sx={{ display: "flex", justifyContent: "space-between", mb: 2 }}>
+                      <Typography variant="subtitle1" sx={{ fontWeight: 600 }}>
+                        Media
+                      </Typography>
+                      <Typography variant="caption" color="text.secondary">
+                        {media.length} {media.length === 1 ? "item" : "items"}
+                      </Typography>
+                    </Box>
+                    <MediaCarousel media={media} onMediaChange={setMedia} maxItems={10} />
+                  </Box>
+
+                  <Box>
+                    <Box sx={{ display: "flex", justifyContent: "space-between", mb: 2 }}>
+                      <Typography variant="subtitle1" sx={{ fontWeight: 600 }}>
+                        Caption / Text
+                      </Typography>
+                      <Typography variant="caption" color="text.secondary">
+                        {content.length} characters
+                      </Typography>
+                    </Box>
+                    <TextField
+                      value={content}
+                      onChange={(e) => setContent(e.target.value)}
+                      placeholder="Write your post caption here..."
+                      multiline
+                      rows={6}
+                      fullWidth
+                      sx={{
+                        "& .MuiOutlinedInput-root": {
+                          fontSize: "1rem",
+                        },
+                      }}
+                    />
+                  </Box>
+                </>
+              ) : (
+                <PlatformContentEditor
+                  platform={editorTab as PlatformType}
+                  globalContent={content}
+                  globalMedia={media}
+                  platformContent={platformContents.find((pc) => pc.platform === editorTab) as PlatformContentType | undefined}
+                  onContentChange={(data) => handlePlatformContentChange(editorTab as PlatformType, data)}
+                  onReset={() => handleResetPlatformContent(editorTab as PlatformType)}
+                  isSaving={isSavingPlatformContent}
+                />
+              )}
+
+              <Divider />
+
               <FormControl fullWidth>
                 <InputLabel>Campaign</InputLabel>
                 <Select
@@ -335,7 +466,6 @@ export default function PostEditorPage() {
 
               <Divider />
 
-              {/* Schedule */}
               <Box>
                 <Typography variant="subtitle1" sx={{ fontWeight: 600, mb: 2 }}>
                   Schedule
@@ -362,7 +492,6 @@ export default function PostEditorPage() {
 
               <Divider />
 
-              {/* Platforms */}
               <Box>
                 <Typography variant="subtitle1" sx={{ fontWeight: 600, mb: 2 }}>
                   Publish to
@@ -407,7 +536,6 @@ export default function PostEditorPage() {
                 </Box>
               </Box>
 
-              {/* Version History */}
               {!isNew && (
                 <>
                   <Divider />
@@ -476,9 +604,7 @@ export default function PostEditorPage() {
             </Box>
           </Box>
 
-          {/* Right Panel - Preview */}
           <Box sx={{ width: "50%", display: "flex", flexDirection: "column", bgcolor: "grey.50" }}>
-            {/* Preview Header */}
             <Box
               sx={{
                 px: 3,
@@ -531,13 +657,12 @@ export default function PostEditorPage() {
               </ToggleButtonGroup>
             </Box>
 
-            {/* Preview Content */}
             <Box sx={{ flex: 1, overflow: "auto", p: 3 }}>
               <Box sx={{ maxWidth: 420, mx: "auto" }}>
                 <SocialPreview
                   platform={activePreviewPlatform}
-                  content={content}
-                  media={media}
+                  content={editorContent.content}
+                  media={editorContent.media}
                   userName="Your Name"
                   userHandle="yourhandle"
                 />
@@ -545,7 +670,6 @@ export default function PostEditorPage() {
             </Box>
           </Box>
 
-          {/* Comments Sidebar */}
           {showComments && !isNew && (
             <Box
               sx={{

@@ -23,6 +23,7 @@ export async function GET(
         campaign: {
           select: { id: true, name: true, color: true },
         },
+        platformContents: true,
         versions: {
           orderBy: { version: "desc" },
         },
@@ -140,6 +141,7 @@ export async function PATCH(
         campaign: {
           select: { id: true, name: true, color: true },
         },
+        platformContents: true,
       },
     });
 

@@ -48,6 +48,7 @@ export async function GET(req: NextRequest) {
         campaign: {
           select: { id: true, name: true, color: true },
         },
+        platformContents: true,
         scheduledPosts: {
           include: {
             socialAccount: {
@@ -79,7 +80,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    const { content, mediaUrls, campaignId, workspaceId } = await req.json();
+    const { content, mediaUrls, campaignId, workspaceId, platformContents } = await req.json();
 
     if (!content || !workspaceId) {
       return NextResponse.json(
@@ -105,17 +106,27 @@ export async function POST(req: NextRequest) {
     const post = await prisma.post.create({
       data: {
         content,
-        mediaUrls: mediaUrls || [],
+        mediaUrls: mediaUrls || "[]",
         campaignId,
         workspaceId,
         creatorId: session.user.id,
         versions: {
           create: {
             content,
-            mediaUrls: mediaUrls || [],
+            mediaUrls: mediaUrls || "[]",
             version: 1,
           },
         },
+        ...(platformContents && {
+          platformContents: {
+            create: platformContents.map((pc: any) => ({
+              platform: pc.platform,
+              content: pc.content || "",
+              mediaUrls: pc.mediaUrls ? JSON.stringify(pc.mediaUrls) : "[]",
+              excluded: pc.excluded || false,
+            })),
+          },
+        }),
       },
       include: {
         creator: {
@@ -124,6 +135,7 @@ export async function POST(req: NextRequest) {
         campaign: {
           select: { id: true, name: true, color: true },
         },
+        platformContents: true,
       },
     });
 

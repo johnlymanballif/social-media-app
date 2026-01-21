@@ -138,23 +138,24 @@ model Campaign {
 }
 
 model Post {
-  id          String   @id @default(cuid())
-  content     String
-  mediaUrls   String   @default("[]")
-  status      String   @default("DRAFT")
-  workspaceId String
-  campaignId  String?
-  creatorId   String
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  id              String   @id @default(cuid())
+  content         String   @default("")
+  mediaUrls       String   @default("[]")
+  status          String   @default("DRAFT")
+  workspaceId     String
+  campaignId      String?
+  creatorId       String
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
 
-  workspace      Workspace       @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
-  campaign       Campaign?       @relation(fields: [campaignId], references: [id], onDelete: SetNull)
-  creator        User            @relation("PostCreator", fields: [creatorId], references: [id])
-  versions       PostVersion[]
-  comments       Comment[]
-  scheduledPosts ScheduledPost[]
-  publishedPosts PublishedPost[]
+  workspace        Workspace         @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  campaign         Campaign?         @relation(fields: [campaignId], references: [id], onDelete: SetNull)
+  creator          User              @relation("PostCreator", fields: [creatorId], references: [id])
+  versions         PostVersion[]
+  comments         Comment[]
+  scheduledPosts   ScheduledPost[]
+  publishedPosts   PublishedPost[]
+  platformContents PlatformContent[]
 }
 
 model PostVersion {
@@ -168,6 +169,21 @@ model PostVersion {
   post Post @relation(fields: [postId], references: [id], onDelete: Cascade)
 
   @@unique([postId, version])
+}
+
+model PlatformContent {
+  id          String   @id @default(cuid())
+  postId      String
+  platform    String
+  content     String   @default("")
+  mediaUrls   String   @default("[]")
+  excluded    Boolean  @default(false)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  post Post @relation(fields: [postId], references: [id], onDelete: Cascade)
+
+  @@unique([postId, platform])
 }
 
 model Comment {
